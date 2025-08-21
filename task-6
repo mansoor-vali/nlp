@@ -1,0 +1,26 @@
+from nltk.util import ngrams
+from nltk.lm import Laplace
+from nltk.tokenize import word_tokenize
+from nltk.lm.preprocessing import padded_everygram_pipeline
+
+def ngram_smoothing(sentence, n):
+    # Tokenize sentence
+    tokens = word_tokenize(sentence.lower())
+    # We need to pass an iterable of tokenized sentences, so wrap tokens in a list
+    train_data, padded_sents = padded_everygram_pipeline(n, [tokens])
+    model = Laplace(n)
+    model.fit(train_data, padded_sents)
+    return model, tokens
+
+sentence = input("Enter a sentence: ")
+n = int(input("Enter the value of N for N-grams: "))
+
+model, tokens = ngram_smoothing(sentence, n)
+
+# Get context: last n-1 tokens
+context = tuple(tokens[-(n-1):]) if n > 1 else ()
+
+# Generate 3 next words based on context
+next_words = list(model.generate(3, text_seed=context))
+
+print("Next words:", ' '.join(next_words))
