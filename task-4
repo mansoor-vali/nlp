@@ -1,0 +1,29 @@
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from collections import Counter
+import string
+
+nltk.download('punkt_tab')
+nltk.download('stopwords')
+
+text = """
+Hola, me llamo Ashok y soy de India. Actualmente estudio en la Universidad Veltech en Chennai.
+Mis cosas favoritas son bailar y jugar cricket. Todos los días escucho música.
+"""
+
+tokens = word_tokenize(text.lower())
+
+tokens = [word for word in tokens if word.isalpha()]
+
+stop_words = set(stopwords.words('spanish'))
+filtered_tokens = [word for word in tokens if word not in stop_words]
+
+# 4. Count frequency of remaining words
+freq_dist = Counter(filtered_tokens)
+
+# 5. Print the most common words
+most_common = freq_dist.most_common(10)
+print("Most frequent words (after stopword removal):")
+for word, freq in most_common:
+    print(f"{word}: {freq}")
