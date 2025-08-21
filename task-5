@@ -1,0 +1,74 @@
+import string
+import random
+import nltk
+from nltk.corpus import stopwords, reuters
+from collections import Counter, defaultdict
+from nltk import FreqDist, ngrams
+
+# Download necessary NLTK data, including punkt_tab for Reuters
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('reuters')
+nltk.download('punkt_tab')  # Fix the error by downloading this
+
+sents = reuters.sents()
+stop_words = set(stopwords.words('english'))
+
+removal_list = stop_words.union(set(string.punctuation)).union({'\t', 'rt'})
+
+unigram = []
+bigram = []
+trigram = []
+tokenized_text = []
+
+for sentence in sents:
+    sentence = [w.lower() for w in sentence if w != '.']
+    tokenized_text.append(sentence)
+    unigram.extend(sentence)
+    bigram.extend(list(ngrams(sentence, 2, pad_left=True, pad_right=True)))
+    trigram.extend(list(ngrams(sentence, 3, pad_left=True, pad_right=True)))
+
+def remove_stopwords_unigram(words):
+    return [w for w in words if w not in removal_list and w is not None]
+
+def remove_stopwords_ngrams(ngrams_list):
+    filtered = []
+    for tup in ngrams_list:
+        if any(word not in removal_list and word is not None for word in tup):
+            filtered.append(tup)
+    return filtered
+
+unigram = remove_stopwords_unigram(unigram)
+bigram = remove_stopwords_ngrams(bigram)
+trigram = remove_stopwords_ngrams(trigram)
+
+freq_uni = FreqDist(unigram)
+freq_bi = FreqDist(bigram)
+freq_tri = FreqDist(trigram)
+
+d = defaultdict(Counter)
+for (a, b, c), freq in freq_tri.items():
+    if a is not None and b is not None and c is not None:
+        d[(a, b)][c] += freq
+
+def pick_word(counter):
+    total = sum(counter.values())
+    r = random.uniform(0, total)
+    upto = 0
+    for word, count in counter.items():
+        if upto + count >= r:
+            return word
+        upto += count
+    return random.choice(list(counter.keys()))
+
+prefix = ("he", "is")
+print(" ".join(prefix))
+s = " ".join(prefix)
+
+for i in range(19):
+    suffix = pick_word(d[prefix]) if prefix in d else None
+    if suffix is None:
+        break
+    s += ' ' + suffix
+    print(s)
+    prefix = (prefix[1], suffix)
