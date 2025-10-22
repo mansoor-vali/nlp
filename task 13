@@ -1,0 +1,244 @@
+# Enhanced Emotion Detection using Ensemble Learning
+
+import pandas as pd
+import numpy as np
+import re
+import string
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
+# Download required NLTK data
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('wordnet')
+nltk.download('omw-1.4')
+
+# Define emotional keywords for each category
+emotional_keywords = {
+    'joy': ['happy', 'excited', 'wonderful', 'great', 'love', 'fantastic', 'amazing', 'perfect', 'joy', 'delighted',
+            'blessed', 'celebrating', 'awesome', 'thrilled', 'excellent', 'incredible', 'beautiful', 'grateful'],
+    'anger': ['angry', 'furious', 'hate', 'mad', 'annoyed', 'frustrated', 'irritated', 'outraged', 'terrible',
+              'awful', 'horrible', 'unacceptable', 'ridiculous', 'fed up', 'idiotic', 'rude'],
+    'sadness': ['sad', 'lonely', 'depressed', 'miserable', 'heartbroken', 'devastated', 'unhappy', 'lost',
+                'crying', 'grief', 'disappointed', 'hopeless', 'regret', 'empty', 'alone'],
+    'surprise': ['surprised', 'shocked', 'unexpected', 'amazed', 'astonished', 'stunned', 'incredible',
+                 'unbelievable', 'wow', 'sudden', 'strange', 'mysterious', 'shocking'],
+    'fear': ['scared', 'afraid', 'terrified', 'frightened', 'nervous', 'anxious', 'worried', 'panic',
+             'horrified', 'terrifying', 'scary', 'dread', 'fear', 'paranoid', 'threatened']
+}
+
+# Create Enhanced Sample Dataset with more nuanced examples
+sample_data = {
+    'text': [
+        # Joy examples with varying intensities and contexts
+        "I'm absolutely overjoyed and couldn't be happier!",
+        "This wonderful news makes my heart sing with happiness",
+        "What a perfectly delightful and beautiful day",
+        "I'm blessed with such amazing friends and family",
+        "Successfully achieved my dreams and feeling incredible",
+        "The celebration was absolutely magnificent",
+        "My heart is bursting with joy and gratitude",
+        "This moment is pure happiness and bliss",
+        "Everything is going so wonderfully well",
+        "Feeling blessed and grateful beyond words",
+        "The happiness in my heart is overflowing",
+        "Such a beautiful and perfect celebration",
+        "My dreams are finally coming true",
+        "This success fills me with pure joy",
+        "Absolutely thrilled with these amazing results",
+        
+        # Anger examples with context and intensity
+        "This outrageous behavior is absolutely unacceptable",
+        "I'm completely furious about this terrible service",
+        "Their constant lies make my blood boil",
+        "This is the most frustrating experience ever",
+        "I'm absolutely livid with their incompetence",
+        "Cannot believe the audacity of these people",
+        "This situation is making me incredibly angry",
+        "Their excuses are absolutely infuriating",
+        "I'm fed up with this ridiculous treatment",
+        "The level of disrespect is outrageous",
+        "This injustice makes me absolutely furious",
+        "I'm enraged by their complete negligence",
+        "Their behavior is totally unacceptable",
+        "These constant delays are driving me mad",
+        "I'm sick and tired of these endless excuses",
+        
+        # Sadness examples with deep emotional context
+        "My heart is completely shattered and broken",
+        "The loss leaves an unbearable emptiness inside",
+        "These memories bring tears to my eyes",
+        "Feeling so alone and desperately miserable",
+        "The pain of goodbye is overwhelming",
+        "Nothing can fill this void in my heart",
+        "Each day feels darker without them here",
+        "This sadness seems to never end",
+        "The weight of loss is crushing me",
+        "Everything reminds me of what I've lost",
+        "These tears won't stop flowing",
+        "The emptiness is consuming me entirely",
+        "Missing them with every breath I take",
+        "This heartache is unbearably painful",
+        "The grief is too heavy to bear alone",
+        
+        # Surprise examples with varying intensities
+        "I absolutely cannot believe what just happened!",
+        "This unexpected turn of events is mind-blowing",
+        "What an incredibly shocking discovery",
+        "Nobody could have predicted this outcome",
+        "The surprise announcement left everyone speechless",
+        "This revelation completely changes everything",
+        "I'm utterly amazed by this development",
+        "The unexpected news took my breath away",
+        "This shocking twist changes everything",
+        "What an unbelievable turn of events",
+        "I'm completely stunned by this revelation",
+        "This surprise left me absolutely speechless",
+        "The most unexpected thing just happened",
+        "This development is absolutely incredible",
+        "I'm totally blown away by this news",
+        
+        # Fear examples with physical and emotional descriptions
+        "This overwhelming terror paralyzes me completely",
+        "My heart races with intense fear and panic",
+        "These dark thoughts fill me with dread",
+        "The constant anxiety is absolutely crippling",
+        "This situation terrifies me to my core",
+        "My fears are consuming every thought",
+        "The horror of what might happen haunts me",
+        "This deep-seated fear won't leave me",
+        "Every shadow fills me with terror",
+        "The panic attacks are getting worse",
+        "This overwhelming dread consumes me",
+        "My fears are becoming unbearable",
+        "The anxiety is absolutely paralyzing",
+        "These frightening thoughts won't stop",
+        "Living in constant fear and worry"
+    ],
+    'emotion': ['joy']*15 + ['anger']*15 + ['sadness']*15 + ['surprise']*15 + ['fear']*15
+}
+
+df = pd.DataFrame(sample_data)
+
+# Enhanced Text Cleaning with Emotion Keyword Preservation
+def clean_text(text):
+    # Convert to lowercase
+    text = str(text).lower()
+    
+    # Remove URLs
+    text = re.sub(r'http\S+|www\S+|https\S+', '', text)
+    
+    # Remove mentions and hashtags
+    text = re.sub(r'\@\w+|\#', '', text)
+    
+    # Tokenize
+    tokens = word_tokenize(text)
+    
+    # Remove stopwords (except negation words and emotional intensifiers)
+    stop_words = set(stopwords.words('english')) - {'no', 'not', 'nor', 'never', 'against', 'very', 'so', 'too', 'more', 'most', 'completely', 'absolutely', 'totally', 'utterly'}
+    
+    # Create a set of all emotional keywords
+    all_emotional_words = set()
+    for words in emotional_keywords.values():
+        all_emotional_words.update(words)
+    
+    # Keep tokens that are either not stopwords or are emotional keywords
+    tokens = [token for token in tokens if token not in stop_words or token in all_emotional_words]
+    
+    # Lemmatization
+    lemmatizer = WordNetLemmatizer()
+    tokens = [lemmatizer.lemmatize(token) for token in tokens]
+    
+    # Add emotional keyword counts as features
+    emotion_counts = []
+    for emotion, keywords in emotional_keywords.items():
+        count = sum(1 for token in tokens if token in keywords)
+        emotion_counts.append(f"{emotion}count{count}")
+    
+    # Combine regular tokens with emotion counts
+    return ' '.join(tokens + emotion_counts)
+
+df['clean_text'] = df['text'].apply(clean_text)
+
+# Split Data
+X = df['clean_text']
+y = df['emotion']
+
+# Using stratified split with smaller test size
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=42, stratify=y)
+
+# Create a pipeline with TF-IDF and Random Forest
+pipeline = Pipeline([
+    ('tfidf', TfidfVectorizer(
+        max_features=6000,
+        ngram_range=(1, 3),
+        min_df=2,
+        max_df=0.95,
+        sublinear_tf=True
+    )),
+    ('rf', RandomForestClassifier(
+        n_estimators=200,
+        max_depth=20,
+        min_samples_split=5,
+        min_samples_leaf=2,
+        max_features='sqrt',
+        class_weight='balanced',
+        random_state=42,
+        n_jobs=-1
+    ))
+])
+
+# Fit the pipeline
+pipeline.fit(X_train, y_train)
+
+# Evaluate with cross-validation
+cv_scores = cross_val_score(pipeline, X_train, y_train, cv=5)
+print("\nCross-validation scores:", cv_scores)
+print("Average CV score:", cv_scores.mean())
+
+# Evaluate on test set
+y_pred = pipeline.predict(X_test)
+print("\nModel Evaluation on Test Set:")
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("\nClassification Report:\n", classification_report(y_test, y_pred))
+print("\nConfusion Matrix:\n", confusion_matrix(y_test, y_pred))
+
+# Test with Custom Sentences
+test_sentences = [
+    "I am so happy today!",
+    "I hate when things go wrong.",
+    "I'm feeling really sad right now.",
+    "That was an amazing experience!",
+    "I'm scared of losing everything.",
+    "This is totally unexpected!",
+    "I can't believe how wonderful this is!",
+    "The situation makes me really angry.",
+    "What a shocking discovery!",
+    "I'm nervous about tomorrow."
+]
+
+# Clean the test sentences
+test_sentences_cleaned = [clean_text(text) for text in test_sentences]
+preds = pipeline.predict(test_sentences_cleaned)
+
+print("\nPredictions on new sentences:")
+for text, emotion in zip(test_sentences, preds):
+    print(f"Text: {text}  --->  Emotion: {emotion}")
+
+# Show prediction probabilities
+proba = pipeline.predict_proba(test_sentences_cleaned)
+emotions = pipeline.classes_
+
+print("\nDetailed Emotion Probabilities:")
+for text, probs in zip(test_sentences, proba):
+    print(f"\nText: {text}")
+    for emotion, prob in zip(emotions, probs):
+        print(f"{emotion}: {prob:.2f}", end=' | ')
